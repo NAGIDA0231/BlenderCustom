@@ -1,7 +1,8 @@
 """
 QuickPanel: よく使う切り替えをまとめた便利パネル。
 
-ボタンを追加するときは、label / is_on / execute を持つクラスを作り QUICK_ITEMS に足す。
+ボタンを追加するときは、label / is_on / execute を持つクラス（またはオブジェクト）を作り QUICK_ITEMS に足す。
+選択を変えるだけのボタンは SelectionCommand で作れる。
   label(context)   : ボタンに表示する文字
   is_on(context)   : オン表示（青）にするか
   execute(context) : 押したときの処理（3D ビューのコンテキストで呼ばれる）
@@ -73,10 +74,10 @@ class ToggleModifierDisplay:
     def label(context):
         modifiers = modifier_targets(context)
         if not modifiers:
-            return "モディファイア: なし"
+            return "モディファイア なし"
         if any(m.show_viewport for m in modifiers):
-            return "モディファイア: 表示中"
-        return "モディファイア: 非表示"
+            return "モディファイア 表示"
+        return "モディファイア 非表示"
 
     @staticmethod
     def is_on(context):
@@ -128,15 +129,62 @@ class AlignVerticesToZeroX:
         show_status(f"頂点を X=0 に: {count} 個の頂点をそろえました")
 
 
-QUICK_ITEMS = (ToggleSelectTool, ToggleModifierDisplay, AlignVerticesToZeroX)
+def count_selected(context):
+    """編集中のメッシュで選んでいる頂点の数"""
+    total = 0
+    for obj in context.objects_in_mode_unique_data:
+        if obj.type != 'MESH':
+            continue
+        obj.update_from_editmode()
+        total += obj.data.count_selected_items()[0]
+    return total
+
+
+class SelectionCommand:
+    """選んでいるものを起点に、選択を広げる・変えるボタン（編集モード用）"""
+
+    def __init__(self, name, run):
+        self.name = name
+        self.run = run
+
+    def label(self, context):
+        return self.name
+
+    def is_on(self, context):
+        return False
+
+    def execute(self, context):
+        if context.mode != 'EDIT_MESH':
+            show_status(f"{self.name}: 編集モードで使ってください")
+            return
+        if count_selected(context) == 0:
+            show_status(f"{self.name}: 起点にするものを先に選んでください")
+            return
+        self.run()
+        bpy.ops.ed.undo_push(message=self.name)
+
+
+SELECT_LOOP = SelectionCommand("ループ選択", lambda: bpy.ops.mesh.select_edge_loop_multi())
+SELECT_RING = SelectionCommand("リング選択", lambda: bpy.ops.mesh.select_edge_ring_multi())
+SELECT_LINKED = SelectionCommand("リンク選択", lambda: bpy.ops.mesh.select_linked())
+SELECT_MORE = SelectionCommand("選択を広げる", lambda: bpy.ops.mesh.select_more())
+SELECT_LESS = SelectionCommand("選択を狭める", lambda: bpy.ops.mesh.select_less())
+
+# 2 列で、左から右・上から下の順に並ぶ
+QUICK_ITEMS = (
+    ToggleSelectTool, ToggleModifierDisplay,
+    AlignVerticesToZeroX, SELECT_LINKED,
+    SELECT_LOOP, SELECT_RING,
+    SELECT_MORE, SELECT_LESS,
+)
 
 
 class QuickPanel(FloatingPanel):
     title = "QuickPanel"
     pref_x = "quick_panel_x"
     pref_y = "quick_panel_y"
-    columns = 1
-    cell_width = 146
+    columns = 2
+    cell_width = 120
     cell_height = 24
 
     def cell_count(self):
