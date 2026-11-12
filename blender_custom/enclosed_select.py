@@ -188,15 +188,36 @@ def draw_outline(coords):
     gpu.state.blend_set('NONE')
 
 
-def draw_lasso(op):
-    if len(op.points) < 2:
-        return
-    draw_outline(list(op.points) + [op.points[0]])
+class GestureShape:
+    """ドラッグ中の枠の形。描画にはオペレーター自体ではなくこれを渡す
+    （オペレーターが外から打ち切られても、描画処理が消えたオペレーターを参照しないようにするため）"""
+
+    def __init__(self, kind):
+        self.kind = kind
+        self.points = []
+        self.handle = None
 
 
-def draw_box(op):
-    (x0, y0), (x1, y1) = op.start, op.end
-    draw_outline([(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)])
+# 表示中の枠の描画ハンドル。アドオンの無効化時に残っていれば外す
+ACTIVE_SHAPES = set()
+
+
+def draw_shape(shape):
+    points = shape.points
+    if shape.kind == 'LASSO':
+        if len(points) < 2:
+            return
+        draw_outline(list(points) + [points[0]])
+    elif len(points) == 2:
+        (x0, y0), (x1, y1) = points
+        draw_outline([(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)])
+
+
+def remove_shape(shape):
+    if shape.handle is not None:
+        bpy.types.SpaceView3D.draw_handler_remove(shape.handle, 'WINDOW')
+        shape.handle = None
+    ACTIVE_SHAPES.discard(shape)
 
 
 def press_position(context, event):
@@ -209,24 +230,30 @@ def press_position(context, event):
 class GestureOperatorBase:
     """ドラッグ中に枠を描き、ボタンを離したら finish_gesture() を呼ぶ共通処理"""
 
-    draw_function = None
+    shape_kind = 'BOX'
 
     @classmethod
     def poll(cls, context):
         return context.area is not None and context.area.type == 'VIEW_3D'
 
-    def start_gesture(self, context):
-        self.handle = bpy.types.SpaceView3D.draw_handler_add(type(self).draw_function, (self,), 'WINDOW',
-                                                             'POST_PIXEL')
+    def start_gesture(self, context, points):
+        self.shape = GestureShape(self.shape_kind)
+        self.shape.points = points
+        self.shape.handle = bpy.types.SpaceView3D.draw_handler_add(draw_shape, (self.shape,), 'WINDOW',
+                                                                   'POST_PIXEL')
+        ACTIVE_SHAPES.add(self.shape)
         context.window_manager.modal_handler_add(self)
         context.area.tag_redraw()
         return {'RUNNING_MODAL'}
 
     def end_gesture(self, context):
-        if self.handle is not None:
-            bpy.types.SpaceView3D.draw_handler_remove(self.handle, 'WINDOW')
-            self.handle = None
-        context.area.tag_redraw()
+        remove_shape(self.shape)
+        if context.area is not None:
+            context.area.tag_redraw()
+
+    def cancel(self, context):
+        # ウィンドウを閉じた・ファイルを開いたなどで、外から打ち切られたとき
+        self.end_gesture(context)
 
     def modal(self, context, event):
         if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
@@ -249,21 +276,23 @@ class VIEW3D_OT_enclosed_lasso_select(GestureOperatorBase, bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     mode: bpy.props.EnumProperty(name="Mode", items=MODE_ITEMS, default='SET')
-    draw_function = draw_lasso
+    shape_kind = 'LASSO'
 
     def invoke(self, context, event):
-        self.points = [press_position(context, event), (event.mouse_region_x, event.mouse_region_y)]
-        return self.start_gesture(context)
+        return self.start_gesture(context, [press_position(context, event),
+                                            (event.mouse_region_x, event.mouse_region_y)])
 
     def update_gesture(self, context, point):
-        last = self.points[-1]
+        points = self.shape.points
+        last = points[-1]
         if abs(point[0] - last[0]) + abs(point[1] - last[1]) >= 2:
-            self.points.append(point)
+            points.append(point)
 
     def finish_gesture(self, context):
-        if len(self.points) < 3:
+        points = self.shape.points
+        if len(points) < 3:
             return {'CANCELLED'}
-        enclosed_lasso(context, self.points, self.mode)
+        enclosed_lasso(context, points, self.mode)
         return {'FINISHED'}
 
 
@@ -274,18 +303,17 @@ class VIEW3D_OT_enclosed_box_select(GestureOperatorBase, bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     mode: bpy.props.EnumProperty(name="Mode", items=MODE_ITEMS, default='SET')
-    draw_function = draw_box
+    shape_kind = 'BOX'
 
     def invoke(self, context, event):
-        self.start = press_position(context, event)
-        self.end = (event.mouse_region_x, event.mouse_region_y)
-        return self.start_gesture(context)
+        return self.start_gesture(context, [press_position(context, event),
+                                            (event.mouse_region_x, event.mouse_region_y)])
 
     def update_gesture(self, context, point):
-        self.end = point
+        self.shape.points[1] = point
 
     def finish_gesture(self, context):
-        (x0, y0), (x1, y1) = self.start, self.end
+        (x0, y0), (x1, y1) = self.shape.points
         if abs(x1 - x0) < 2 or abs(y1 - y0) < 2:
             return {'CANCELLED'}
         enclosed_box(context, min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1), self.mode)
@@ -301,5 +329,7 @@ def register():
 
 
 def unregister():
+    for shape in list(ACTIVE_SHAPES):
+        remove_shape(shape)
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

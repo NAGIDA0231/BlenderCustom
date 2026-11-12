@@ -25,6 +25,23 @@ VISIBLE_MODES = {'OBJECT', 'EDIT_MESH', 'EDIT_CURVE', 'EDIT_CURVES', 'EDIT_ARMAT
                  'EDIT_METABALL', 'EDIT_SURFACE', 'EDIT_TEXT', 'POSE', 'SCULPT'}
 
 
+def show_status(text, seconds=2.0):
+    """メインウィンドウ下部のステータスバーに、一時的にメッセージを出す"""
+    workspace = bpy.context.workspace
+    if workspace is None:
+        return
+    workspace.status_text_set(text)
+
+    def clear():
+        try:
+            workspace.status_text_set(None)
+        except ReferenceError:
+            pass
+        return None
+
+    bpy.app.timers.register(clear, first_interval=seconds)
+
+
 def is_panel_screen(screen):
     """パネル用ウィンドウの画面か（同名があると Blender が「.001」などを付けるので前方一致で判定）"""
     return screen is not None and screen.name.startswith(PANEL_SCREEN_NAME)

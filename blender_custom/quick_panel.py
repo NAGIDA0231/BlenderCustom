@@ -7,10 +7,11 @@ QuickPanel: よく使う切り替えをまとめた便利パネル。
   execute(context) : 押したときの処理（3D ビューのコンテキストで呼ばれる）
 """
 
+import bmesh
 import bpy
 
 from . import listener
-from .floating_panel import Cell, FloatingPanel
+from .floating_panel import Cell, FloatingPanel, show_status
 
 LASSO_TOOL = "builtin.select_lasso"
 BOX_TOOL = "builtin.select_box"
@@ -91,7 +92,43 @@ class ToggleModifierDisplay:
             m.show_viewport = show
 
 
-QUICK_ITEMS = (ToggleSelectTool, ToggleModifierDisplay)
+class AlignVerticesToZeroX:
+    """編集モードで選んでいる頂点の X 座標を 0 にそろえる（オブジェクトのローカル座標。ミラーの中心線）"""
+
+    @staticmethod
+    def label(context):
+        return "頂点を X=0 に"
+
+    @staticmethod
+    def is_on(context):
+        return False
+
+    @staticmethod
+    def execute(context):
+        if context.mode != 'EDIT_MESH':
+            show_status("頂点を X=0 に: 編集モードで使ってください")
+            return
+        count = 0
+        for obj in context.objects_in_mode_unique_data:
+            if obj.type != 'MESH':
+                continue
+            bm = bmesh.from_edit_mesh(obj.data)
+            changed = False
+            for vert in bm.verts:
+                if vert.select and not vert.hide:
+                    vert.co.x = 0.0
+                    count += 1
+                    changed = True
+            if changed:
+                bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
+        if count == 0:
+            show_status("頂点を X=0 に: 頂点が選ばれていません")
+            return
+        bpy.ops.ed.undo_push(message="頂点を X=0 に")
+        show_status(f"頂点を X=0 に: {count} 個の頂点をそろえました")
+
+
+QUICK_ITEMS = (ToggleSelectTool, ToggleModifierDisplay, AlignVerticesToZeroX)
 
 
 class QuickPanel(FloatingPanel):

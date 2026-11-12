@@ -13,11 +13,11 @@ import gpu
 
 from . import edit_panel, quick_panel
 from .delta_transform import DeltaTransform
-from .floating_panel import PANEL_SCREEN_NAME, draw_rect, inside, is_panel_screen
+from .floating_panel import PANEL_SCREEN_NAME, draw_rect, inside, is_panel_screen, show_status
 from .preferences import get_prefs
 
 WINDOW_WIDTH = 190
-WINDOW_HEIGHT = 240
+WINDOW_HEIGHT = 270
 MARGIN = 4
 PANEL_SPACING = 6
 BACKGROUND_COLOR = (0.09, 0.09, 0.09, 1.0)
@@ -125,23 +125,6 @@ def press_cell(window, name, index, event):
         show_status("Edit Panel: 変形するものが選ばれていません")
         return
     STATE.drag = (transform, window.x + event.mouse_x, window.y + event.mouse_y)
-
-
-def show_status(text):
-    """メインウィンドウ下部のステータスバーに一時的にメッセージを出す"""
-    workspace = bpy.context.workspace
-    if workspace is None:
-        return
-    workspace.status_text_set(text)
-
-    def clear():
-        try:
-            workspace.status_text_set(None)
-        except ReferenceError:
-            pass
-        return None
-
-    bpy.app.timers.register(clear, first_interval=2.0)
 
 
 def end_drag(confirm):
