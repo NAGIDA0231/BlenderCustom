@@ -136,6 +136,84 @@ def register_mesh_editing():
     add_item("Mesh", 'mesh.clipboard_paste', 'V', ctrl=True)
 
 
+# --- 変形中（G / R / S やギズモのドラッグ中）のキー ------------------------------------
+# モーダルキーマップはアドオン用のキーマップに登録できないため、ユーザーキーマップで
+# 標準の項目を無効にして新しい項目を追加し、アドオンを無効にしたときに元へ戻す。
+
+TRANSFORM_MODAL_MAP = "Transform Modal Map"
+
+# 無効にする標準の項目: (propvalue, キー, Shift 付きか)
+TRANSFORM_MODAL_DISABLED = (
+    ('PRECISION', 'LEFT_SHIFT', None),
+    ('PRECISION', 'RIGHT_SHIFT', None),
+    ('AXIS_Y', 'Y', False),
+    ('AXIS_Z', 'Z', False),
+    ('PLANE_Y', 'Y', True),
+    ('PLANE_Z', 'Z', True),
+)
+
+# 追加する項目: (propvalue, キー, 押し方, any, Shift)
+TRANSFORM_MODAL_ADDED = (
+    # Shift を押している間は刻み（回転は 15°。刻み幅は snapping.py）
+    ('SNAP_INV_ON', 'LEFT_SHIFT', 'PRESS', True, False),
+    ('SNAP_INV_OFF', 'LEFT_SHIFT', 'RELEASE', True, False),
+    ('SNAP_INV_ON', 'RIGHT_SHIFT', 'PRESS', True, False),
+    ('SNAP_INV_OFF', 'RIGHT_SHIFT', 'RELEASE', True, False),
+    # Unity に合わせて Y キーで上下（Blender の Z）、Z キーで奥行き（Blender の Y）に制限する
+    ('AXIS_Z', 'Y', 'PRESS', False, False),
+    ('AXIS_Y', 'Z', 'PRESS', False, False),
+    ('PLANE_Z', 'Y', 'PRESS', False, True),
+    ('PLANE_Y', 'Z', 'PRESS', False, True),
+)
+
+
+def matches_disabled(kmi):
+    for propvalue, key, shift in TRANSFORM_MODAL_DISABLED:
+        if kmi.propvalue == propvalue and kmi.type == key and not kmi.is_user_defined:
+            if shift is None or bool(kmi.shift) == shift:
+                return True
+    return False
+
+
+def is_added_item(kmi):
+    if not kmi.is_user_defined:
+        return False
+    for propvalue, key, value, any_modifier, shift in TRANSFORM_MODAL_ADDED:
+        if (kmi.propvalue == propvalue and kmi.type == key and kmi.value == value
+                and bool(kmi.any) == any_modifier and (any_modifier or bool(kmi.shift) == shift)):
+            return True
+    return False
+
+
+def apply_transform_modal():
+    kc = bpy.context.window_manager.keyconfigs.user
+    km = kc.keymaps.get(TRANSFORM_MODAL_MAP) if kc else None
+    if km is None:
+        return 0.5
+    for kmi in km.keymap_items:
+        if matches_disabled(kmi):
+            kmi.active = False
+    for propvalue, key, value, any_modifier, shift in TRANSFORM_MODAL_ADDED:
+        exists = any(k.propvalue == propvalue and k.type == key and k.value == value and k.is_user_defined
+                     and (any_modifier or bool(k.shift) == shift) for k in km.keymap_items)
+        if not exists:
+            km.keymap_items.new_modal(propvalue, key, value, any=any_modifier, shift=shift)
+    return None
+
+
+def restore_transform_modal():
+    kc = bpy.context.window_manager.keyconfigs.user
+    km = kc.keymaps.get(TRANSFORM_MODAL_MAP) if kc else None
+    if km is None:
+        return
+    for kmi in list(km.keymap_items):
+        if is_added_item(kmi):
+            km.keymap_items.remove(kmi)
+    for kmi in km.keymap_items:
+        if matches_disabled(kmi):
+            kmi.active = True
+
+
 def register():
     wm = bpy.context.window_manager
     if wm.keyconfigs.addon is None:
@@ -144,11 +222,14 @@ def register():
     register_selection()
     register_mesh_editing()
     bpy.app.timers.register(disable_press_context_menus, first_interval=0.1)
+    bpy.app.timers.register(apply_transform_modal, first_interval=0.1)
 
 
 def unregister():
-    if bpy.app.timers.is_registered(disable_press_context_menus):
-        bpy.app.timers.unregister(disable_press_context_menus)
+    for timer in (disable_press_context_menus, apply_transform_modal):
+        if bpy.app.timers.is_registered(timer):
+            bpy.app.timers.unregister(timer)
+    restore_transform_modal()
     set_press_context_menus_active(True)
     for km, kmi in addon_keymap_items:
         km.keymap_items.remove(kmi)

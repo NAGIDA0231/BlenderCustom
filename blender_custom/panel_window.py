@@ -165,7 +165,7 @@ def handle_drag_event(window, event):
         dx = window.x + event.mouse_x - start_x
         dy = window.y + event.mouse_y - start_y
         try:
-            transform.update(dx, dy, get_prefs().drag_speed)
+            transform.update(dx, dy, get_prefs().drag_speed, snap=event.shift)
         except Exception as error:
             print("BlenderCustom: Edit Panel の変形中にエラーが起きたため取り消しました:", repr(error))
             end_drag(confirm=False)

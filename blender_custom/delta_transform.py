@@ -14,6 +14,7 @@ from mathutils import Matrix, Vector
 AXIS_VECTORS = {'X': Vector((1.0, 0.0, 0.0)), 'Y': Vector((0.0, 1.0, 0.0)), 'Z': Vector((0.0, 0.0, 1.0))}
 SCALE_PER_PIXEL = 0.005
 DEGREES_PER_PIXEL = 0.5
+SNAP_DEGREES = 15.0
 UNDO_NAMES = {"translate": "移動", "resize": "拡大縮小", "rotate": "回転"}
 
 
@@ -59,7 +60,8 @@ class DeltaTransform:
         screen.normalize()
         return dx * screen.x + dy * screen.y
 
-    def build_matrix(self, dx, dy, speed):
+    def build_matrix(self, dx, dy, speed, snap=False):
+        """snap=True のとき、回転は 15° 刻みにする"""
         if self.kind == "translate":
             if self.axis is None:
                 offset = (self.view_right * dx + self.view_up * dy) * self.units_per_pixel * speed
@@ -75,7 +77,10 @@ class DeltaTransform:
                 values["XYZ".index(self.axis)] = factor
             core = Matrix.Diagonal((*values, 1.0))
         else:
-            angle = math.radians(dx * DEGREES_PER_PIXEL * speed)
+            degrees = dx * DEGREES_PER_PIXEL * speed
+            if snap:
+                degrees = round(degrees / SNAP_DEGREES) * SNAP_DEGREES
+            angle = math.radians(degrees)
             axis_vector = self.view_dir if self.axis is None else AXIS_VECTORS[self.axis]
             core = Matrix.Rotation(angle, 4, axis_vector)
         return Matrix.Translation(self.pivot) @ core @ Matrix.Translation(-self.pivot)
@@ -91,8 +96,8 @@ class DeltaTransform:
             bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
         self.area.tag_redraw()
 
-    def update(self, dx, dy, speed):
-        self.apply_matrix(self.build_matrix(dx, dy, speed))
+    def update(self, dx, dy, speed, snap=False):
+        self.apply_matrix(self.build_matrix(dx, dy, speed, snap))
 
     def cancel(self):
         self.apply_matrix(Matrix.Identity(4))
