@@ -17,7 +17,7 @@ from . import listener
 
 HIGHLIGHT_COLOR = (1.0, 0.85, 0.1)
 FACE_FILL_ALPHA = 0.25
-VERT_PICK_RADIUS = 15.0
+VERT_PICK_RADIUS = 25.0
 EDGE_PICK_RADIUS = 10.0
 MAX_BACKFACE_SKIPS = 64
 RAY_STEP = 1e-4
@@ -60,7 +60,7 @@ def build_cache(obj):
             continue
         tris.setdefault(face.index, []).append([loop.vert.index for loop in loops])
     bvh = BVHTree.FromPolygons(coords, polys, all_triangles=False) if polys else None
-    return {"coords": coords, "bvh": bvh, "face_map": face_map,
+    return {"coords": coords, "bvh": bvh, "face_map": face_map, "vert_hidden": [v.hide for v in bm.verts],
             "face_verts": face_verts, "face_edges": face_edges, "tris": tris}
 
 
@@ -100,7 +100,76 @@ def cast_front_face(bvh, origin, direction, is_mirrored):
     return None, None
 
 
+def is_xray(context):
+    space = context.space_data
+    if space is None or space.type != 'VIEW_3D':
+        return False
+    shading = space.shading
+    if shading.type == 'WIREFRAME':
+        return shading.show_xray_wireframe
+    return shading.show_xray
+
+
+def edit_mesh_caches(context):
+    for obj in context.objects_in_mode_unique_data:
+        if obj.type == 'MESH':
+            yield obj, get_cache(obj)
+
+
+def is_point_visible(context, region, rv3d, world_point, screen_point):
+    """頂点が手前の（表向きの）面に隠れていないか"""
+    origin = region_2d_to_origin_3d(region, rv3d, screen_point)
+    to_point = world_point - origin
+    distance = to_point.length
+    if distance == 0.0:
+        return True
+    direction = to_point / distance
+    margin = distance * 1e-3 + 1e-4
+    for obj, data in edit_mesh_caches(context):
+        if data["bvh"] is None:
+            continue
+        mw = obj.matrix_world
+        inv = mw.inverted()
+        local_dir = (inv.to_3x3() @ direction).normalized()
+        location, _ = cast_front_face(data["bvh"], inv @ origin, local_dir, mw.determinant() < 0.0)
+        if location is not None and ((mw @ location) - origin).length < distance - margin:
+            return False
+    return True
+
+
+def nearest_visible_vertex(context, region, rv3d, mouse, radius):
+    """マウスから radius ピクセル以内で一番近い、見えている頂点（面に関係なく探す）"""
+    candidates = []
+    for obj, data in edit_mesh_caches(context):
+        mw = obj.matrix_world
+        hidden = data["vert_hidden"]
+        for index, co in enumerate(data["coords"]):
+            if hidden[index]:
+                continue
+            world = mw @ co
+            screen = location_3d_to_region_2d(region, rv3d, world)
+            if screen is None:
+                continue
+            distance = (screen - mouse).length
+            if distance <= radius:
+                candidates.append((distance, obj, data, index, world, screen))
+    candidates.sort(key=lambda c: c[0])
+    xray = is_xray(context)
+    for _, obj, data, index, world, screen in candidates:
+        if xray or is_point_visible(context, region, rv3d, world, screen):
+            return obj, data, index
+    return None
+
+
 def find_hover(context, region, rv3d, mouse):
+    use_vert, use_edge, use_face = context.tool_settings.mesh_select_mode
+    if use_vert:
+        radius = VERT_PICK_RADIUS * context.preferences.system.ui_scale
+        vertex = nearest_visible_vertex(context, region, rv3d, mouse, radius)
+        if vertex is not None:
+            obj, data, index = vertex
+            return ("VERT", obj, data, index)
+
     origin = region_2d_to_origin_3d(region, rv3d, mouse)
     direction = region_2d_to_vector_3d(region, rv3d, mouse)
     best = None
@@ -128,10 +197,10 @@ def find_hover(context, region, rv3d, mouse):
     def screen(vi):
         return location_3d_to_region_2d(region, rv3d, mw @ data["coords"][vi])
 
-    use_vert, use_edge, use_face = context.tool_settings.mesh_select_mode
     only_one = (use_vert + use_edge + use_face) == 1
 
-    if use_vert:
+    # 頂点モードだけのときは、近くに頂点がなくても、マウスの下の面で一番近い頂点を出す
+    if use_vert and only_one:
         nearest = None
         for vi in data["face_verts"][face_index]:
             p = screen(vi)
