@@ -121,27 +121,73 @@ def press_cell(window, name, index, event):
         return
     (kind, _), axis = edit_panel.cell_target(index)
     transform = DeltaTransform(kind, axis, view)
-    if transform.is_valid:
-        STATE.drag = (transform, event.mouse_x, event.mouse_y)
+    if not transform.is_valid:
+        show_status("Edit Panel: 変形するものが選ばれていません")
+        return
+    STATE.drag = (transform, window.x + event.mouse_x, window.y + event.mouse_y)
+
+
+def show_status(text):
+    """メインウィンドウ下部のステータスバーに一時的にメッセージを出す"""
+    workspace = bpy.context.workspace
+    if workspace is None:
+        return
+    workspace.status_text_set(text)
+
+    def clear():
+        try:
+            workspace.status_text_set(None)
+        except ReferenceError:
+            pass
+        return None
+
+    bpy.app.timers.register(clear, first_interval=2.0)
+
+
+def end_drag(confirm):
+    """変形を確定（confirm=True）または取り消して、ドラッグ状態を必ず解除する"""
+    transform = STATE.drag[0]
+    STATE.drag = None
+    try:
+        if confirm:
+            transform.finish()
+        else:
+            transform.cancel()
+    except Exception as error:
+        print("BlenderCustom: Edit Panel の変形を終了できませんでした:", repr(error))
+
+
+def handle_drag_event(window, event):
+    """ドラッグ中のイベント。ボタンをパネル用ウィンドウの外で離した場合も受け取るため、全ウィンドウで処理する"""
+    transform, start_x, start_y = STATE.drag
+    if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
+        # ウィンドウをまたいでも追えるよう、画面全体の座標で差分を取る
+        dx = window.x + event.mouse_x - start_x
+        dy = window.y + event.mouse_y - start_y
+        try:
+            transform.update(dx, dy, get_prefs().drag_speed)
+        except Exception as error:
+            print("BlenderCustom: Edit Panel の変形中にエラーが起きたため取り消しました:", repr(error))
+            end_drag(confirm=False)
+        return {'RUNNING_MODAL'}
+    if event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+        end_drag(confirm=True)
+        return {'RUNNING_MODAL'}
+    if event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
+        end_drag(confirm=False)
+        return {'RUNNING_MODAL'}
+    if is_panel_window(window) or event.type in CONSUMED_EVENTS:
+        return {'RUNNING_MODAL'}
+    return None
 
 
 def handle_event(context, event):
-    """パネル用ウィンドウのマウス操作を処理する。ほかのウィンドウのイベントは触らない"""
+    """パネル用ウィンドウのマウス操作を処理する。ドラッグ中以外は、ほかのウィンドウのイベントは触らない"""
     window = context.window
+    if STATE.drag is not None:
+        return handle_drag_event(window, event)
     if not is_panel_window(window):
         return None
-
-    if STATE.drag is not None:
-        transform, start_x, start_y = STATE.drag
-        if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
-            transform.update(event.mouse_x - start_x, event.mouse_y - start_y, get_prefs().drag_speed)
-        elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
-            STATE.drag = None
-            transform.finish()
-        elif event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
-            STATE.drag = None
-            transform.cancel()
-        return {'RUNNING_MODAL'}
 
     if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
         hover = hit_test(window, event.mouse_x, event.mouse_y)

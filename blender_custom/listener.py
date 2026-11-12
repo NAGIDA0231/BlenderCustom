@@ -56,14 +56,32 @@ class BLENDERCUSTOM_OT_listener(bpy.types.Operator):
         return {'PASS_THROUGH'}
 
 
+def is_listener_running(window):
+    """ウィンドウでこのリスナーが動いているか。止まっていたら起動し直すために使う"""
+    modal_operators = getattr(window, "modal_operators", None)
+    if modal_operators is None:
+        return window.as_pointer() in STATE.running_windows
+    # アドオンの再読み込み直後は、終了待ちの古いリスナーが None として残っていることがある
+    return any(op is not None and op.bl_idname == "BLENDERCUSTOM_OT_listener" for op in modal_operators)
+
+
 def start_listeners():
     if STATE.enabled is False:
         return None
+    try:
+        return start_missing_listeners()
+    except Exception as error:
+        # 例外でタイマーが止まると監視が終わってしまうため、記録して次回また試す
+        print("BlenderCustom: リスナーの起動に失敗しました:", repr(error))
+        return 1.0
+
+
+def start_missing_listeners():
     wm = bpy.context.window_manager
     if wm is None:
         return 0.5
     for window in wm.windows:
-        if window.as_pointer() in STATE.running_windows:
+        if is_listener_running(window):
             continue
         try:
             with bpy.context.temp_override(window=window):
