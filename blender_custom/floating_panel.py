@@ -20,8 +20,14 @@ TITLE_TEXT_COLOR = (0.9, 0.9, 0.9, 1.0)
 BUTTON_COLOR = (0.28, 0.28, 0.28, 1.0)
 BUTTON_HOVER_COLOR = (0.42, 0.42, 0.42, 1.0)
 BUTTON_ON_COLOR = (0.20, 0.45, 0.60, 1.0)
+PANEL_SCREEN_NAME = "BlenderCustom Panel"
 VISIBLE_MODES = {'OBJECT', 'EDIT_MESH', 'EDIT_CURVE', 'EDIT_CURVES', 'EDIT_ARMATURE', 'EDIT_LATTICE',
                  'EDIT_METABALL', 'EDIT_SURFACE', 'EDIT_TEXT', 'POSE', 'SCULPT'}
+
+
+def is_panel_screen(screen):
+    """パネル用ウィンドウの画面か（同名があると Blender が「.001」などを付けるので前方一致で判定）"""
+    return screen is not None and screen.name.startswith(PANEL_SCREEN_NAME)
 
 
 class Cell:
@@ -88,19 +94,26 @@ class FloatingPanel:
         pass
 
     # --- 配置 ----------------------------------------------------------------
-    def layout(self, region):
+    def layout(self, region, origin=None, total_width=None):
+        """origin=(left, top) と total_width を渡すと、その位置・幅で並べる（パネル用ウィンドウ向け）"""
         scale = bpy.context.preferences.system.ui_scale
-        prefs = get_prefs()
-        cell_w = int(self.cell_width * scale)
-        cell_h = int(self.cell_height * scale)
         gap = int(GAP * scale)
         title = int(TITLE_HEIGHT * scale)
+        if total_width is None:
+            cell_w = int(self.cell_width * scale)
+        else:
+            cell_w = int((total_width - (self.columns + 1) * gap) / self.columns)
+        cell_h = int(self.cell_height * scale)
         count = self.cell_count()
         rows = (count + self.columns - 1) // self.columns
         width = self.columns * cell_w + (self.columns + 1) * gap
         height = title + rows * cell_h + (rows + 1) * gap
-        left = getattr(prefs, self.pref_x)
-        top = region.height - getattr(prefs, self.pref_y)
+        if origin is None:
+            prefs = get_prefs()
+            left = getattr(prefs, self.pref_x)
+            top = region.height - getattr(prefs, self.pref_y)
+        else:
+            left, top = origin
         cells = []
         for index in range(count):
             row, col = divmod(index, self.columns)
@@ -110,7 +123,12 @@ class FloatingPanel:
         return {"panel": (left, top - height, width, height), "title": (left, top - title, width, title),
                 "cells": cells}
 
-    def is_visible(self, context, area):
+    def is_visible(self, context, screen, area):
+        """3D ビュー内に浮かべて表示するか（パネル用ウィンドウは別に描くので対象外）"""
+        if not get_prefs().show_in_viewport:
+            return False
+        if is_panel_screen(screen):
+            return False
         if context.mode not in VISIBLE_MODES:
             return False
         space = area.spaces.active
@@ -127,7 +145,7 @@ class FloatingPanel:
                 ly = mouse_y - region.y
                 if not (0 <= lx < region.width and 0 <= ly < region.height):
                     continue
-                if not self.is_visible(context, area):
+                if not self.is_visible(context, window.screen, area):
                     return None
                 layout = self.layout(region)
                 if not inside(layout["panel"], lx, ly):
@@ -147,9 +165,11 @@ class FloatingPanel:
         area = context.area
         if region is None or area is None or region.type != 'WINDOW':
             return
-        if not self.is_visible(context, area):
+        if not self.is_visible(context, context.screen, area):
             return
-        layout = self.layout(region)
+        self.draw_layout(context, self.layout(region), self.hover)
+
+    def draw_layout(self, context, layout, hover):
         scale = context.preferences.system.ui_scale
         try:
             cells = self.cells(context)
@@ -160,7 +180,7 @@ class FloatingPanel:
         draw_rect(layout["title"], TITLE_COLOR)
         draw_text_centered(layout["title"], self.title, int(10 * scale), TITLE_TEXT_COLOR)
         for index, (rect, cell) in enumerate(zip(layout["cells"], cells)):
-            if self.hover == index:
+            if hover == index:
                 color = BUTTON_HOVER_COLOR
             elif cell.is_on:
                 color = BUTTON_ON_COLOR

@@ -6,6 +6,16 @@ import bpy
 class BlenderCustomPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
+    show_in_viewport: bpy.props.BoolProperty(
+        name="3D ビュー内にもパネルを表示",
+        description="Edit Panel と QuickPanel を 3D ビューの上にも浮かべて表示する",
+        default=False,
+    )
+    drag_speed: bpy.props.FloatProperty(
+        name="パネルウィンドウのドラッグ速度",
+        description="パネル用ウィンドウの Edit Panel で、マウスを動かした量に対する変形量の倍率",
+        default=1.0, min=0.05, max=10.0,
+    )
     edit_panel_x: bpy.props.IntProperty(name="Edit Panel 左からの位置", default=60)
     edit_panel_y: bpy.props.IntProperty(name="Edit Panel 上からの位置", default=110)
     quick_panel_x: bpy.props.IntProperty(name="QuickPanel 左からの位置", default=60)
@@ -16,7 +26,11 @@ class BlenderCustomPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
-        col = layout.column(heading="パネルの位置")
+        layout.operator("blendercustom.open_panel_window", icon='WINDOW')
+        layout.prop(self, "drag_speed")
+        layout.prop(self, "show_in_viewport")
+        col = layout.column(heading="3D ビュー内のパネルの位置")
+        col.active = self.show_in_viewport
         row = col.row()
         row.prop(self, "edit_panel_x")
         row.prop(self, "edit_panel_y")
