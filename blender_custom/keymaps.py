@@ -167,51 +167,75 @@ TRANSFORM_MODAL_ADDED = (
 )
 
 
-def matches_disabled(kmi):
-    for propvalue, key, shift in TRANSFORM_MODAL_DISABLED:
+# --- ナイフツールの操作中のキー -------------------------------------------------------
+# 標準では右ボタンを押した瞬間が「次の切れ目を始める」で、右ドラッグの回転ができない。
+# 右クリック（ドラッグせずに離す）で次の切れ目、右ドラッグは視点操作に渡す（中ボタンと同じ PANNING）。
+
+KNIFE_MODAL_MAP = "Knife Tool Modal Map"
+
+KNIFE_MODAL_DISABLED = (
+    ('NEW_CUT', 'RIGHTMOUSE', False),
+)
+
+# 追加順に優先される。CLICK を先に置き、それ以外（押す・ドラッグ・離す）を視点操作に渡す
+KNIFE_MODAL_ADDED = (
+    ('NEW_CUT', 'RIGHTMOUSE', 'CLICK', False, False),
+    ('PANNING', 'RIGHTMOUSE', 'ANY', False, False),
+)
+
+# モーダルキーマップごとの変更: キーマップ名 → (無効にする標準の項目, 追加する項目)
+MODAL_PATCHES = {
+    TRANSFORM_MODAL_MAP: (TRANSFORM_MODAL_DISABLED, TRANSFORM_MODAL_ADDED),
+    KNIFE_MODAL_MAP: (KNIFE_MODAL_DISABLED, KNIFE_MODAL_ADDED),
+}
+
+
+def matches_disabled(kmi, disabled):
+    for propvalue, key, shift in disabled:
         if kmi.propvalue == propvalue and kmi.type == key and not kmi.is_user_defined:
             if shift is None or bool(kmi.shift) == shift:
                 return True
     return False
 
 
-def is_added_item(kmi):
-    if not kmi.is_user_defined:
-        return False
-    for propvalue, key, value, any_modifier, shift in TRANSFORM_MODAL_ADDED:
-        if (kmi.propvalue == propvalue and kmi.type == key and kmi.value == value
-                and bool(kmi.any) == any_modifier and (any_modifier or bool(kmi.shift) == shift)):
-            return True
-    return False
+def matches_added(kmi, spec):
+    propvalue, key, value, any_modifier, shift = spec
+    return (kmi.is_user_defined and kmi.propvalue == propvalue and kmi.type == key and kmi.value == value
+            and bool(kmi.any) == any_modifier and (any_modifier or bool(kmi.shift) == shift))
 
 
-def apply_transform_modal():
+def apply_modal_patches():
     kc = bpy.context.window_manager.keyconfigs.user
-    km = kc.keymaps.get(TRANSFORM_MODAL_MAP) if kc else None
-    if km is None:
+    if kc is None:
         return 0.5
-    for kmi in km.keymap_items:
-        if matches_disabled(kmi):
-            kmi.active = False
-    for propvalue, key, value, any_modifier, shift in TRANSFORM_MODAL_ADDED:
-        exists = any(k.propvalue == propvalue and k.type == key and k.value == value and k.is_user_defined
-                     and (any_modifier or bool(k.shift) == shift) for k in km.keymap_items)
-        if not exists:
-            km.keymap_items.new_modal(propvalue, key, value, any=any_modifier, shift=shift)
+    for name, (disabled, added) in MODAL_PATCHES.items():
+        km = kc.keymaps.get(name)
+        if km is None:
+            return 0.5
+        for kmi in km.keymap_items:
+            if matches_disabled(kmi, disabled):
+                kmi.active = False
+        for spec in added:
+            if not any(matches_added(k, spec) for k in km.keymap_items):
+                propvalue, key, value, any_modifier, shift = spec
+                km.keymap_items.new_modal(propvalue, key, value, any=any_modifier, shift=shift)
     return None
 
 
-def restore_transform_modal():
+def restore_modal_patches():
     kc = bpy.context.window_manager.keyconfigs.user
-    km = kc.keymaps.get(TRANSFORM_MODAL_MAP) if kc else None
-    if km is None:
+    if kc is None:
         return
-    for kmi in list(km.keymap_items):
-        if is_added_item(kmi):
-            km.keymap_items.remove(kmi)
-    for kmi in km.keymap_items:
-        if matches_disabled(kmi):
-            kmi.active = True
+    for name, (disabled, added) in MODAL_PATCHES.items():
+        km = kc.keymaps.get(name)
+        if km is None:
+            continue
+        for kmi in list(km.keymap_items):
+            if any(matches_added(kmi, spec) for spec in added):
+                km.keymap_items.remove(kmi)
+        for kmi in km.keymap_items:
+            if matches_disabled(kmi, disabled):
+                kmi.active = True
 
 
 def register():
@@ -222,14 +246,14 @@ def register():
     register_selection()
     register_mesh_editing()
     bpy.app.timers.register(disable_press_context_menus, first_interval=0.1)
-    bpy.app.timers.register(apply_transform_modal, first_interval=0.1)
+    bpy.app.timers.register(apply_modal_patches, first_interval=0.1)
 
 
 def unregister():
-    for timer in (disable_press_context_menus, apply_transform_modal):
+    for timer in (disable_press_context_menus, apply_modal_patches):
         if bpy.app.timers.is_registered(timer):
             bpy.app.timers.unregister(timer)
-    restore_transform_modal()
+    restore_modal_patches()
     set_press_context_menus_active(True)
     for km, kmi in addon_keymap_items:
         km.keymap_items.remove(kmi)
