@@ -169,7 +169,9 @@ TRANSFORM_MODAL_ADDED = (
 
 # --- ナイフツールの操作中のキー -------------------------------------------------------
 # 標準では右ボタンを押した瞬間が「次の切れ目を始める」で、右ドラッグの回転ができない。
-# 右クリック（ドラッグせずに離す）で次の切れ目、右ドラッグは視点操作に渡す（中ボタンと同じ PANNING）。
+# ナイフの操作中は Blender がドラッグも右クリックも判定しないため、
+# 右ボタンを押した瞬間は視点操作として後ろに渡し（knife_orbit.py が受け取って回転する）、
+# 離したときを「次の切れ目」にする（回転した場合は knife_orbit.py が離したことをナイフに渡さない）。
 
 KNIFE_MODAL_MAP = "Knife Tool Modal Map"
 
@@ -177,10 +179,9 @@ KNIFE_MODAL_DISABLED = (
     ('NEW_CUT', 'RIGHTMOUSE', False),
 )
 
-# 追加順に優先される。CLICK を先に置き、それ以外（押す・ドラッグ・離す）を視点操作に渡す
 KNIFE_MODAL_ADDED = (
-    ('NEW_CUT', 'RIGHTMOUSE', 'CLICK', False, False),
-    ('PANNING', 'RIGHTMOUSE', 'ANY', False, False),
+    ('PANNING', 'RIGHTMOUSE', 'PRESS', False, False),
+    ('NEW_CUT', 'RIGHTMOUSE', 'RELEASE', False, False),
 )
 
 # モーダルキーマップごとの変更: キーマップ名 → (無効にする標準の項目, 追加する項目)
@@ -215,6 +216,12 @@ def apply_modal_patches():
         for kmi in km.keymap_items:
             if matches_disabled(kmi, disabled):
                 kmi.active = False
+        # 以前の版で追加した、今の内容と違う項目を消す（同じキーで追加した自分の項目が対象）
+        added_keys = {spec[1] for spec in added}
+        for kmi in list(km.keymap_items):
+            if (kmi.is_user_defined and kmi.type in added_keys
+                    and not any(matches_added(kmi, spec) for spec in added)):
+                km.keymap_items.remove(kmi)
         for spec in added:
             if not any(matches_added(k, spec) for k in km.keymap_items):
                 propvalue, key, value, any_modifier, shift = spec
