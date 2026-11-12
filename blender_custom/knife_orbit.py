@@ -4,7 +4,7 @@
 ナイフの操作中は Blender がドラッグを判定しないため、標準の「右ドラッグで回転」が働かない。
 右ボタンを押した瞬間（ナイフのキー設定で視点操作に渡している。keymaps.py）に、ここで回転を始める。
   - マウスを動かしてから離した: 回転だけ（離したことはナイフに渡さない）
-  - 動かさずに離した（右クリック）: 離したことをナイフに渡し、ナイフの「次の切れ目」にする
+  - 動かさずに離した（右クリック）: 離したことをナイフに渡し、ナイフの「確定」にする
 """
 
 import bpy
@@ -73,7 +73,7 @@ class BLENDERCUSTOM_OT_knife_orbit(bpy.types.Operator):
         if event.type == 'RIGHTMOUSE' and event.value == 'RELEASE':
             if self.dragged:
                 return {'FINISHED'}
-            # 動かさずに離した（右クリック）ので、ナイフの「次の切れ目」に使わせる
+            # 動かさずに離した（右クリック）ので、ナイフの「確定」に使わせる
             return {'FINISHED', 'PASS_THROUGH'}
         if event.type == 'ESC':
             return {'FINISHED', 'PASS_THROUGH'}

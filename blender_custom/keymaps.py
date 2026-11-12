@@ -171,7 +171,8 @@ TRANSFORM_MODAL_ADDED = (
 # 標準では右ボタンを押した瞬間が「次の切れ目を始める」で、右ドラッグの回転ができない。
 # ナイフの操作中は Blender がドラッグも右クリックも判定しないため、
 # 右ボタンを押した瞬間は視点操作として後ろに渡し（knife_orbit.py が受け取って回転する）、
-# 離したときを「次の切れ目」にする（回転した場合は knife_orbit.py が離したことをナイフに渡さない）。
+# 離したときを「確定」にする（回転した場合は knife_orbit.py が離したことをナイフに渡さない）。
+# 標準の右クリックの「次の切れ目」は使わない（Enter / Space の確定は標準のまま）。
 
 KNIFE_MODAL_MAP = "Knife Tool Modal Map"
 
@@ -181,7 +182,7 @@ KNIFE_MODAL_DISABLED = (
 
 KNIFE_MODAL_ADDED = (
     ('PANNING', 'RIGHTMOUSE', 'PRESS', False, False),
-    ('NEW_CUT', 'RIGHTMOUSE', 'RELEASE', False, False),
+    ('CONFIRM', 'RIGHTMOUSE', 'RELEASE', False, False),
 )
 
 # モーダルキーマップごとの変更: キーマップ名 → (無効にする標準の項目, 追加する項目)
