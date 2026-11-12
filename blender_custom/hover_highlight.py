@@ -35,32 +35,38 @@ STATE = HoverState()
 
 
 def build_cache(obj):
+    """ハイライト用に、頂点の座標・面・三角形を集める。
+
+    BMesh の index_update() / ensure_lookup_table() は呼ばない。Blender 内部の要素の番号や表を書き換えると、
+    実行中の変形（エッジスライドなど）が内部で使っている情報と食い違い、Blender が落ちることがあるため。
+    番号はここで数えたもの（リストの位置）を使う。
+    """
     bm = bmesh.from_edit_mesh(obj.data)
-    bm.verts.index_update()
-    bm.faces.index_update()
-    bm.verts.ensure_lookup_table()
-    bm.faces.ensure_lookup_table()
-    coords = [v.co.copy() for v in bm.verts]
+    verts = list(bm.verts)
+    faces = list(bm.faces)
+    vert_number = {vert: number for number, vert in enumerate(verts)}
+    face_number = {face: number for number, face in enumerate(faces)}
+    coords = [v.co.copy() for v in verts]
     polys = []
     face_map = []
     face_verts = {}
     face_edges = {}
-    for f in bm.faces:
-        if f.hide:
+    for number, face in enumerate(faces):
+        if face.hide:
             continue
-        indices = [v.index for v in f.verts]
+        indices = [vert_number[v] for v in face.verts]
         polys.append(indices)
-        face_map.append(f.index)
-        face_verts[f.index] = indices
-        face_edges[f.index] = [(e.verts[0].index, e.verts[1].index) for e in f.edges]
+        face_map.append(number)
+        face_verts[number] = indices
+        face_edges[number] = [(vert_number[e.verts[0]], vert_number[e.verts[1]]) for e in face.edges]
     tris = {}
     for loops in bm.calc_loop_triangles():
         face = loops[0].face
         if face.hide:
             continue
-        tris.setdefault(face.index, []).append([loop.vert.index for loop in loops])
+        tris.setdefault(face_number[face], []).append([vert_number[loop.vert] for loop in loops])
     bvh = BVHTree.FromPolygons(coords, polys, all_triangles=False) if polys else None
-    return {"coords": coords, "bvh": bvh, "face_map": face_map, "vert_hidden": [v.hide for v in bm.verts],
+    return {"coords": coords, "bvh": bvh, "face_map": face_map, "vert_hidden": [v.hide for v in verts],
             "face_verts": face_verts, "face_edges": face_edges, "tris": tris}
 
 
@@ -234,9 +240,26 @@ def polyline_shader(region, width):
     return shader
 
 
+LISTENER_IDNAME = "BLENDERCUSTOM_OT_listener"
+
+
+def is_other_modal_running(window):
+    """変形・ループカット・範囲選択など、ほかのモーダル操作が動いているか（その間はハイライトしない）"""
+    if window is None:
+        return False
+    for op in getattr(window, "modal_operators", ()):
+        if op is None:
+            continue
+        if op.bl_idname != LISTENER_IDNAME:
+            return True
+    return False
+
+
 def draw_highlight():
     context = bpy.context
     if context.mode != 'EDIT_MESH':
+        return
+    if is_other_modal_running(context.window):
         return
     region = context.region
     rv3d = context.region_data
