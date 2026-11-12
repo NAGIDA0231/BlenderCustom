@@ -43,7 +43,8 @@ class DeltaTransform:
                 if not verts:
                     continue
                 originals = [v.co.copy() for v in verts]
-                self.edit_meshes.append((obj, verts, originals))
+                # bm への参照を持ち続ける。手放すと Python 側の BMesh が解放され、頂点が無効になる
+                self.edit_meshes.append((obj, bm, verts, originals))
                 points.extend(obj.matrix_world @ co for co in originals)
         elif context.mode == 'OBJECT':
             for obj in context.selected_editable_objects:
@@ -88,7 +89,7 @@ class DeltaTransform:
     def apply_matrix(self, matrix):
         for obj, original in self.objects:
             obj.matrix_world = matrix @ original
-        for obj, verts, originals in self.edit_meshes:
+        for obj, _, verts, originals in self.edit_meshes:
             world = obj.matrix_world
             local = world.inverted() @ matrix @ world
             for vert, co in zip(verts, originals):
