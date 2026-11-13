@@ -164,7 +164,8 @@ class BLENDERCUSTOM_OT_edge_eraser(bpy.types.Operator):
 
     def modal(self, context, event):
         if self.stop_requested:
-            return {'CANCELLED'}
+            # ボタンなどで終了済み。このイベント（終了後の最初のクリックなど）は通常の操作に渡す
+            return {'CANCELLED', 'PASS_THROUGH'}
         if context.mode != 'EDIT_MESH':
             self.finish()
             return {'CANCELLED'}
