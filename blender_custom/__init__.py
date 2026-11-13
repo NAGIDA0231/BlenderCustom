@@ -20,7 +20,8 @@ if "bpy" in locals():
     import importlib
 
     for _name in (
-        "preferences", "listener", "floating_panel", "delta_transform", "theme", "snapping", "enclosed_select",
+        "preferences", "listener", "floating_panel", "delta_transform", "theme", "snapping", "viewport_defaults",
+        "enclosed_select",
         "hover_highlight", "select_mode_icons", "mesh_delete", "mesh_clipboard", "select_all_toggle",
         "edit_panel", "quick_panel", "panel_window", "knife_orbit", "keymaps",
     ):
@@ -36,6 +37,7 @@ from . import (  # noqa: E402
     delta_transform,
     theme,
     snapping,
+    viewport_defaults,
     enclosed_select,
     hover_highlight,
     select_mode_icons,
@@ -55,6 +57,7 @@ MODULES = (
     preferences,
     theme,
     snapping,
+    viewport_defaults,
     enclosed_select,
     panel_window,
     hover_highlight,
