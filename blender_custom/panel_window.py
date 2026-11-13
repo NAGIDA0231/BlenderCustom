@@ -124,7 +124,7 @@ def press_cell(window, name, index, event):
     if not transform.is_valid:
         show_status("Edit Panel: 変形するものが選ばれていません")
         return
-    STATE.drag = (transform, window.x + event.mouse_x, window.y + event.mouse_y)
+    STATE.drag = (transform, window.x + event.mouse_x, window.y + event.mouse_y, bool(event.shift))
 
 
 def end_drag(confirm):
@@ -142,13 +142,19 @@ def end_drag(confirm):
 
 def handle_drag_event(window, event):
     """ドラッグ中のイベント。ボタンをパネル用ウィンドウの外で離した場合も受け取るため、全ウィンドウで処理する"""
-    transform, start_x, start_y = STATE.drag
+    transform, start_x, start_y, was_snap = STATE.drag
     if event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
         # ウィンドウをまたいでも追えるよう、画面全体の座標で差分を取る
-        dx = window.x + event.mouse_x - start_x
-        dy = window.y + event.mouse_y - start_y
+        mouse_x = window.x + event.mouse_x
+        mouse_y = window.y + event.mouse_y
+        snap = bool(event.shift)
+        if snap != was_snap:
+            # Shift を押した・離した位置を新しい基準にして、動きが飛ばないようにする
+            transform.rebase()
+            start_x, start_y = mouse_x, mouse_y
+            STATE.drag = (transform, start_x, start_y, snap)
         try:
-            transform.update(dx, dy, get_prefs().drag_speed, snap=event.shift)
+            transform.update(mouse_x - start_x, mouse_y - start_y, get_prefs().drag_speed, snap=snap)
         except Exception as error:
             print("BlenderCustom: Edit Panel の変形中にエラーが起きたため取り消しました:", repr(error))
             end_drag(confirm=False)

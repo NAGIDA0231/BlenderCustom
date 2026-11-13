@@ -15,6 +15,14 @@ AXIS_VECTORS = {'X': Vector((1.0, 0.0, 0.0)), 'Y': Vector((0.0, 1.0, 0.0)), 'Z':
 SCALE_PER_PIXEL = 0.005
 DEGREES_PER_PIXEL = 0.5
 SNAP_DEGREES = 15.0
+SNAP_DISTANCE = 0.01  # Shift を押しているときの移動の刻み（m）
+SNAP_SCALE = 0.01  # Shift を押しているときの拡大縮小の刻み（倍率）
+PIXELS_PER_STEP = 5  # Shift を押しているとき、マウスを何ピクセル動かすと 1 刻み進むか
+
+
+def steps(pixels, speed):
+    """Shift を押しているときの刻み数（速度の設定も反映する）"""
+    return round(pixels * speed / PIXELS_PER_STEP)
 UNDO_NAMES = {"translate": "移動", "resize": "拡大縮小", "rotate": "回転"}
 
 
@@ -31,6 +39,8 @@ class DeltaTransform:
         self.units_per_pixel = rv3d.view_distance * 2.0 / max(self.region.height, 1)
         self.objects = []
         self.edit_meshes = []
+        self.base = Matrix.Identity(4)
+        self.current = Matrix.Identity(4)
 
         context = bpy.context
         points = []
@@ -62,16 +72,28 @@ class DeltaTransform:
         return dx * screen.x + dy * screen.y
 
     def build_matrix(self, dx, dy, speed, snap=False):
-        """snap=True のとき、回転は 15° 刻みにする"""
+        """snap=True（Shift）のとき、移動は 0.01 m、拡大縮小は 0.01 倍、回転は 15° 刻みにする。
+        移動と拡大縮小は、マウスを PIXELS_PER_STEP ピクセル動かすごとに 1 刻み進む（細かく合わせやすくするため）"""
         if self.kind == "translate":
             if self.axis is None:
-                offset = (self.view_right * dx + self.view_up * dy) * self.units_per_pixel * speed
+                if snap:
+                    offset = (self.view_right * steps(dx, speed) + self.view_up * steps(dy, speed)) * SNAP_DISTANCE
+                else:
+                    offset = (self.view_right * dx + self.view_up * dy) * self.units_per_pixel * speed
             else:
                 axis_vector = AXIS_VECTORS[self.axis]
-                offset = axis_vector * self.screen_amount(axis_vector, dx, dy) * self.units_per_pixel * speed
+                pixels = self.screen_amount(axis_vector, dx, dy)
+                if snap:
+                    amount = steps(pixels, speed) * SNAP_DISTANCE
+                else:
+                    amount = pixels * self.units_per_pixel * speed
+                offset = axis_vector * amount
             return Matrix.Translation(offset)
         if self.kind == "resize":
-            factor = max(0.01, 1.0 + dx * SCALE_PER_PIXEL * speed)
+            if snap:
+                factor = max(SNAP_SCALE, 1.0 + steps(dx, speed) * SNAP_SCALE)
+            else:
+                factor = max(0.01, 1.0 + dx * SCALE_PER_PIXEL * speed)
             values = [factor, factor, factor]
             if self.axis is not None:
                 values = [1.0, 1.0, 1.0]
@@ -98,7 +120,13 @@ class DeltaTransform:
         self.area.tag_redraw()
 
     def update(self, dx, dy, speed, snap=False):
-        self.apply_matrix(self.build_matrix(dx, dy, speed, snap))
+        """dx, dy は基準の位置（ドラッグの開始、または rebase した位置）からのマウスの移動量"""
+        self.current = self.build_matrix(dx, dy, speed, snap) @ self.base
+        self.apply_matrix(self.current)
+
+    def rebase(self):
+        """今の変形を基準にする。ドラッグ中に Shift を押した・離したとき、動きが飛ばないようにする"""
+        self.base = self.current.copy()
 
     def cancel(self):
         self.apply_matrix(Matrix.Identity(4))
