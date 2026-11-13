@@ -1,7 +1,7 @@
 """
 辺消しモード: 編集モードで、クリックした辺を溶解する（穴は開けず、両側の面を 1 枚にする）。
 
-QuickPanel の「辺消し」ボタンで始める。右クリックか Esc で終わる。右ドラッグは視点の回転。
+QuickPanel の「辺消しモード」ボタンで始め、もう一度押すと終わる。右クリックか Esc でも終わる。右ドラッグは視点の回転。
 メッシュが変わっても安全なように、BMesh の要素は保持せず、イベントのたびに読み直す
 （保持した要素を Undo などの後に使うと Blender が落ちることがあるため）。
 """
@@ -82,6 +82,21 @@ def dissolve_edge(context, object_name, number):
     return True
 
 
+# 動いている辺消しモード（重ねて始めない・ボタンで終了するために使う）
+ACTIVE = set()
+
+
+def is_active():
+    return len(ACTIVE) > 0
+
+
+def stop_all():
+    """動いている辺消しモードをすべて終える（表示はすぐ消し、モード自体は次のイベントで終わる）"""
+    for op in list(ACTIVE):
+        op.stop_requested = True
+        op.finish()
+
+
 def draw_hover_edge(op):
     if op.hover is None:
         return
@@ -114,12 +129,16 @@ class BLENDERCUSTOM_OT_edge_eraser(bpy.types.Operator):
         self.hover = None
         self.right_press = None
         self.orbiting = False
+        self.stop_requested = False
         self.handle = bpy.types.SpaceView3D.draw_handler_add(draw_hover_edge, (self,), 'WINDOW', 'POST_VIEW')
         self.area.header_text_set(HEADER_TEXT)
         context.window_manager.modal_handler_add(self)
+        ACTIVE.add(self)
         return {'RUNNING_MODAL'}
 
     def finish(self):
+        ACTIVE.discard(self)
+        self.hover = None
         if self.handle is not None:
             bpy.types.SpaceView3D.draw_handler_remove(self.handle, 'WINDOW')
             self.handle = None
@@ -144,6 +163,8 @@ class BLENDERCUSTOM_OT_edge_eraser(bpy.types.Operator):
         self.area.tag_redraw()
 
     def modal(self, context, event):
+        if self.stop_requested:
+            return {'CANCELLED'}
         if context.mode != 'EDIT_MESH':
             self.finish()
             return {'CANCELLED'}
@@ -198,8 +219,12 @@ class BLENDERCUSTOM_OT_edge_eraser(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
 
-def start(context):
-    """QuickPanel から呼ぶ（3D ビューのコンテキストで）"""
+def toggle(context):
+    """QuickPanel から呼ぶ（3D ビューのコンテキストで）。動いていれば終え、止まっていれば始める"""
+    if is_active():
+        stop_all()
+        show_status("辺消しモードを終了しました")
+        return
     if context.mode != 'EDIT_MESH':
         show_status("辺消し: 編集モードで使ってください")
         return
@@ -211,4 +236,5 @@ def register():
 
 
 def unregister():
+    stop_all()
     bpy.utils.unregister_class(BLENDERCUSTOM_OT_edge_eraser)

@@ -11,7 +11,7 @@ Blender のメインウィンドウの外や別のモニターに置ける。操
 import bpy
 import gpu
 
-from . import edit_panel, quick_panel
+from . import edge_eraser, edit_panel, quick_panel
 from .delta_transform import DeltaTransform
 from .floating_panel import PANEL_SCREEN_NAME, draw_rect, inside, is_panel_screen, show_status
 from .preferences import get_prefs
@@ -189,6 +189,11 @@ def handle_event(context, event):
         if hit is not None:
             press_cell(window, hit[0], hit[1], event)
             redraw_window(window)
+        return {'RUNNING_MODAL'}
+    if event.type == 'ESC' and event.value == 'PRESS' and edge_eraser.is_active():
+        # 辺消しモードはメインウィンドウで動くので、パネル用ウィンドウの Esc でも終えられるようにする
+        edge_eraser.stop_all()
+        redraw_window(window)
         return {'RUNNING_MODAL'}
     if event.type in CONSUMED_EVENTS:
         return {'RUNNING_MODAL'}
