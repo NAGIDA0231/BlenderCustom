@@ -1,5 +1,6 @@
 """
-3D ビューの表示の初期値。Blender の起動時とファイルを開いたとき（新規ファイルを含む）に設定する。
+3D ビューの表示の初期値（裏面の非表示・縦の軸の線）。
+Blender の起動時とファイルを開いたとき（新規ファイルを含む）に設定する。
 
 これらは .blend ファイルごとの設定なので、プリファレンスでは固定できない。
 その後に手で切り替えた場合は、次にファイルを開くまでそのまま。
@@ -12,6 +13,8 @@ from bpy.app.handlers import persistent
 def apply_to_space(space):
     # 面の裏側を表示しない（Unity と同じく表側から見たときだけ面を描く）
     space.shading.show_backface_culling = True
+    # 縦の軸の線（Blender の Z 軸。Unity の呼び方では Y 軸で、テーマで緑にしている）を表示する
+    space.overlay.show_axis_z = True
 
 
 def apply_to_all_views():
