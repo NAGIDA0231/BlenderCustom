@@ -15,8 +15,8 @@ AXIS_VECTORS = {'X': Vector((1.0, 0.0, 0.0)), 'Y': Vector((0.0, 1.0, 0.0)), 'Z':
 SCALE_PER_PIXEL = 0.005
 DEGREES_PER_PIXEL = 0.5
 SNAP_DEGREES = 15.0
-SNAP_DISTANCE = 0.01  # Shift を押しているときの移動の刻み（m）
-SNAP_SCALE = 0.01  # Shift を押しているときの拡大縮小の刻み（倍率）
+SNAP_DISTANCE = 0.1  # Shift を押しているときの移動の刻み（m）
+SNAP_SCALE = 0.1  # Shift を押しているときの拡大縮小の刻み（倍率）
 PIXELS_PER_STEP = 5  # Shift を押しているとき、マウスを何ピクセル動かすと 1 刻み進むか
 
 
@@ -74,7 +74,7 @@ class DeltaTransform:
         return dx * screen.x + dy * screen.y
 
     def build_matrix(self, dx, dy, speed, snap=False):
-        """snap=True（Shift）のとき、移動は 0.01 m、拡大縮小は 0.01 倍、回転は 15° 刻みにする。
+        """snap=True（Shift）のとき、移動は 0.1 m、拡大縮小は 0.1 倍、回転は 15° 刻みにする。
         移動と拡大縮小は、マウスを PIXELS_PER_STEP ピクセル動かすごとに 1 刻み進む（細かく合わせやすくするため）"""
         if self.kind == "translate":
             if self.axis is None:
