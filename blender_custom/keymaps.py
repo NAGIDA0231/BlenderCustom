@@ -24,10 +24,9 @@ SELECT_ALL_OPERATORS = {
     "Particle": "particle.select_all",
 }
 
-# Ctrl+D の切り替え。ここにない編集モードは Blender 標準の TOGGLE を使う
-SELECT_TOGGLE_OPERATORS = {
-    "Object Mode": "object.toggle_select_collection",
-    "Mesh": "mesh.toggle_select_all_strict",
+# D の全選択で、標準の select_all の代わりに使う操作（オブジェクトモードはアクティブなコレクションが対象）
+SELECT_ALL_D_OPERATORS = {
+    "Object Mode": "object.select_collection",
 }
 
 VIEW_AXIS_KEYS = (("F1", 'RIGHT', 'LEFT'), ("F2", 'TOP', 'BOTTOM'), ("F3", 'FRONT', 'BACK'))
@@ -112,14 +111,15 @@ def register_selection():
     for key, mode in SELECT_MODE_KEYS:
         add_item("Mesh", 'mesh.select_mode', key, type=mode, use_extend=True, action='TOGGLE')
         add_item("Mesh", 'mesh.select_mode', key, shift=True, type=mode, use_extend=False, action='TOGGLE')
-    # Ctrl+A 全選択 / Ctrl+D 全選択と全解除の切り替え
+    # D / Ctrl+A 全選択、Ctrl+D 全解除
     for name, select_all in SELECT_ALL_OPERATORS.items():
         add_item(name, select_all, 'A', ctrl=True, action='SELECT')
-        toggle = SELECT_TOGGLE_OPERATORS.get(name)
-        if toggle is not None:
-            add_item(name, toggle, 'D', ctrl=True)
+        special = SELECT_ALL_D_OPERATORS.get(name)
+        if special is not None:
+            add_item(name, special, 'D')
         else:
-            add_item(name, select_all, 'D', ctrl=True, action='TOGGLE')
+            add_item(name, select_all, 'D', action='SELECT')
+        add_item(name, select_all, 'D', ctrl=True, action='DESELECT')
     # 投げ縄・ボックス選択は、完全に囲んだものだけを選ぶ版に置き換える
     for names, idname in ((LASSO_TOOL_KEYMAPS, 'view3d.enclosed_lasso_select'),
                           (BOX_TOOL_KEYMAPS, 'view3d.enclosed_box_select')):

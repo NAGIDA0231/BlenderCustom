@@ -1,10 +1,10 @@
 """
-全選択されていなければ全選択、全選択されていれば全解除する（Ctrl+D）。
+D キーの全選択のうち、オブジェクトモード用の処理。
 
-オブジェクトモードでは、アウトライナーで選んでいるコレクション（入れ子を含む）が対象。
+オブジェクトモードの D は、アウトライナーで選んでいるコレクション（入れ子を含む）のオブジェクトを全部選ぶ。
+編集モードなどの D（全選択）と Ctrl+D（全解除）は Blender 標準の select_all を使う（keymaps.py）。
 """
 
-import bmesh
 import bpy
 
 
@@ -14,10 +14,10 @@ def collection_objects(context):
             if o.visible_get(view_layer=context.view_layer) and not o.hide_select]
 
 
-class OBJECT_OT_toggle_select_collection(bpy.types.Operator):
-    """アクティブなコレクションのオブジェクトを全選択／全解除で切り替える"""
-    bl_idname = "object.toggle_select_collection"
-    bl_label = "Toggle Select Collection"
+class OBJECT_OT_select_collection(bpy.types.Operator):
+    """アウトライナーで選んでいるコレクションのオブジェクトを全部選ぶ（ほかのオブジェクトの選択は外す）"""
+    bl_idname = "object.select_collection"
+    bl_label = "Select Collection Objects"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -28,11 +28,8 @@ class OBJECT_OT_toggle_select_collection(bpy.types.Operator):
         targets = collection_objects(context)
         if not targets:
             return {'CANCELLED'}
-        all_selected = all(o.select_get() for o in targets)
         for obj in context.view_layer.objects:
             obj.select_set(False)
-        if all_selected:
-            return {'FINISHED'}
         for obj in targets:
             obj.select_set(True)
         if context.view_layer.objects.active not in targets:
@@ -40,29 +37,7 @@ class OBJECT_OT_toggle_select_collection(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class MESH_OT_toggle_select_all_strict(bpy.types.Operator):
-    """見えている頂点がすべて選ばれていれば全解除、そうでなければ全選択する"""
-    bl_idname = "mesh.toggle_select_all_strict"
-    bl_label = "Toggle Select All"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return context.mode == 'EDIT_MESH'
-
-    def execute(self, context):
-        all_selected = True
-        for obj in context.objects_in_mode_unique_data:
-            if obj.type != 'MESH':
-                continue
-            bm = bmesh.from_edit_mesh(obj.data)
-            if any(not v.select for v in bm.verts if not v.hide):
-                all_selected = False
-                break
-        return bpy.ops.mesh.select_all(action='DESELECT' if all_selected else 'SELECT')
-
-
-CLASSES = (OBJECT_OT_toggle_select_collection, MESH_OT_toggle_select_all_strict)
+CLASSES = (OBJECT_OT_select_collection,)
 
 
 def register():
