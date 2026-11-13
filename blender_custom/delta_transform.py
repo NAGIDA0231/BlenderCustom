@@ -24,6 +24,8 @@ def steps(pixels, speed):
     """Shift を押しているときの刻み数（速度の設定も反映する）"""
     return round(pixels * speed / PIXELS_PER_STEP)
 UNDO_NAMES = {"translate": "移動", "resize": "拡大縮小", "rotate": "回転"}
+# Blender の軸 → 表示する軸（Edit Panel のボタンと同じ Unity の呼び方。Y が上下、Z が奥行き）
+DISPLAY_AXIS = {'X': 'X', 'Y': 'Z', 'Z': 'Y'}
 
 
 class DeltaTransform:
@@ -123,14 +125,48 @@ class DeltaTransform:
         """dx, dy は基準の位置（ドラッグの開始、または rebase した位置）からのマウスの移動量"""
         self.current = self.build_matrix(dx, dy, speed, snap) @ self.base
         self.apply_matrix(self.current)
+        self.area.header_text_set(self.describe(snap))
+
+    def describe(self, snap):
+        """3D ビューの上部に出す、今の変形量の説明（例: 移動 X: +0.050 m）"""
+        name = UNDO_NAMES.get(self.kind, self.kind)
+        label = "全体" if self.axis is None else DISPLAY_AXIS[self.axis]
+        matrix = self.current
+        if self.kind == "translate":
+            offset = matrix.translation
+            if self.axis is None:
+                value = f"{offset.length:.3f} m"
+            else:
+                value = f"{offset.dot(AXIS_VECTORS[self.axis]):+.3f} m"
+            step = f"{SNAP_DISTANCE} m"
+        elif self.kind == "resize":
+            scale = matrix.to_scale()
+            factor = scale.x if self.axis is None else scale["XYZ".index(self.axis)]
+            value = f"{factor:.2f} 倍"
+            step = f"{SNAP_SCALE} 倍"
+        else:
+            rotation = matrix.to_quaternion()
+            axis_vector = self.view_dir if self.axis is None else AXIS_VECTORS[self.axis]
+            degrees = math.degrees(rotation.angle)
+            if rotation.axis.dot(axis_vector) < 0.0:
+                degrees = -degrees
+            value = f"{degrees:+.1f}°"
+            step = f"{SNAP_DEGREES:.0f}°"
+        snap_text = f"Shift: {step} 刻み中" if snap else f"Shift で {step} 刻み"
+        return f"Edit Panel  {name} {label}: {value}    （{snap_text}）"
+
+    def clear_header(self):
+        self.area.header_text_set(None)
 
     def rebase(self):
         """今の変形を基準にする。ドラッグ中に Shift を押した・離したとき、動きが飛ばないようにする"""
         self.base = self.current.copy()
 
     def cancel(self):
+        self.clear_header()
         self.apply_matrix(Matrix.Identity(4))
 
     def finish(self):
+        self.clear_header()
         with bpy.context.temp_override(window=self.window, area=self.area, region=self.region):
             bpy.ops.ed.undo_push(message="Edit Panel: " + UNDO_NAMES.get(self.kind, self.kind))
