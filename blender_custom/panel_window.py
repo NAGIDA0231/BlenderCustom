@@ -17,7 +17,7 @@ from .floating_panel import PANEL_SCREEN_NAME, draw_rect, inside, is_panel_scree
 from .preferences import get_prefs
 
 WINDOW_WIDTH = 190
-WINDOW_HEIGHT = 295
+WINDOW_HEIGHT = 322
 MARGIN = 4
 PANEL_SPACING = 6
 BACKGROUND_COLOR = (0.09, 0.09, 0.09, 1.0)

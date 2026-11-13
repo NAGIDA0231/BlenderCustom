@@ -23,7 +23,7 @@ if "bpy" in locals():
         "preferences", "listener", "floating_panel", "delta_transform", "theme", "snapping", "viewport_defaults",
         "enclosed_select",
         "hover_highlight", "select_mode_icons", "mesh_delete", "mesh_clipboard", "select_all_toggle",
-        "edit_panel", "quick_panel", "panel_window", "knife_orbit", "keymaps",
+        "edit_panel", "quick_panel", "panel_window", "knife_orbit", "edge_eraser", "keymaps",
     ):
         if _name in locals():
             importlib.reload(locals()[_name])
@@ -48,6 +48,7 @@ from . import (  # noqa: E402
     quick_panel,
     panel_window,
     knife_orbit,
+    edge_eraser,
     keymaps,
 )
 
@@ -68,6 +69,7 @@ MODULES = (
     edit_panel,
     quick_panel,
     knife_orbit,
+    edge_eraser,
     listener,
     keymaps,
 )

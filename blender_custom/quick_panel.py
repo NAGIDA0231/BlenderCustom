@@ -170,12 +170,32 @@ SELECT_LINKED = SelectionCommand("リンク選択", lambda: bpy.ops.mesh.select_
 SELECT_MORE = SelectionCommand("選択を広げる", lambda: bpy.ops.mesh.select_more())
 SELECT_LESS = SelectionCommand("選択を狭める", lambda: bpy.ops.mesh.select_less())
 
+class StartEdgeEraser:
+    """辺消しモードを始める（クリックした辺を溶解する）"""
+
+    @staticmethod
+    def label(context):
+        return "辺消しモード"
+
+    @staticmethod
+    def is_on(context):
+        # パネル用ウィンドウから見ても分かるよう、全ウィンドウを調べる
+        return any(op is not None and op.bl_idname == "BLENDERCUSTOM_OT_edge_eraser"
+                   for window in context.window_manager.windows for op in window.modal_operators)
+
+    @staticmethod
+    def execute(context):
+        from . import edge_eraser
+        edge_eraser.start(context)
+
+
 # 2 列で、左から右・上から下の順に並ぶ
 QUICK_ITEMS = (
     ToggleSelectTool, ToggleModifierDisplay,
     AlignVerticesToZeroX, SELECT_LINKED,
     SELECT_LOOP, SELECT_RING,
     SELECT_MORE, SELECT_LESS,
+    StartEdgeEraser,
 )
 
 
